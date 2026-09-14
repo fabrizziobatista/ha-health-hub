@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..models import CheckResult, CheckRuntimeState, EntitySnapshot
+from ..models import CheckResult
 from .base import BaseCheck, numeric_value
 
 
@@ -16,7 +16,9 @@ class NumericRangeCheck(BaseCheck):
             return self.inactive()
         value = numeric_value(snapshot)
         if value is None:
-            return self.unknown("Numeric value is unavailable or invalid", value=getattr(snapshot, "state", None))
+            return self.unknown(
+                "Numeric value is unavailable or invalid", value=getattr(snapshot, "state", None)
+            )
         params = self.definition.params
         if "critical_below" in params and value <= params["critical_below"]:
             return CheckResult("critical", f"Value {value:g} is below critical limit", value=value)

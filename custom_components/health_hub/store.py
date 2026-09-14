@@ -38,7 +38,11 @@ class HealthHubStore:
         ):
             self.data = default_store_data()
         else:
-            self.data = {"version": STORE_VERSION, "checks": deepcopy(dict(loaded["checks"])), "systems": deepcopy(dict(loaded["systems"]))}
+            self.data = {
+                "version": STORE_VERSION,
+                "checks": deepcopy(dict(loaded["checks"])),
+                "systems": deepcopy(dict(loaded["systems"])),
+            }
         return deepcopy(self.data)
 
     async def async_save(self) -> None:

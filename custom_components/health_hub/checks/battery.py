@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..models import CheckResult, CheckRuntimeState, EntitySnapshot
+from ..models import CheckResult
 from .base import BaseCheck, numeric_value
 
 
@@ -16,7 +16,10 @@ class BatteryCheck(BaseCheck):
             return self.inactive()
         value = numeric_value(snapshot)
         if value is None:
-            return self.unknown("Battery value is unavailable or non-numeric", value=getattr(snapshot, "state", None))
+            return self.unknown(
+                "Battery value is unavailable or non-numeric",
+                value=getattr(snapshot, "state", None),
+            )
         unit = (snapshot.attributes.get("unit_of_measurement") or "").strip() if snapshot else ""
         if unit not in {"%", "percent"}:
             return self.unknown("Battery unit must be %", value=value)

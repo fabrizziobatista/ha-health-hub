@@ -29,7 +29,10 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
 async def async_setup_entry(hass: Any, entry: Any) -> bool:
     """Set up a singleton Health Hub with YAML-owned systems and checks."""
     from homeassistant.core import callback
-    from homeassistant.helpers.event import async_track_point_in_time, async_track_state_change_event
+    from homeassistant.helpers.event import (
+        async_track_point_in_time,
+        async_track_state_change_event,
+    )
     from homeassistant.helpers.storage import Store
 
     domain_data = hass.data.setdefault(DOMAIN, {})
@@ -50,11 +53,15 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
     store = HealthHubStore(Store(hass, STORE_VERSION, f"{DOMAIN}.{entry.entry_id}"))
     manager = HealthManager(systems, store, emit=_emit)
     domain_data[DATA_MANAGER] = manager
-    await manager.async_initialize(_snapshot(hass.states.get(entity_id), entity_id) for entity_id in manager.entity_ids())
+    await manager.async_initialize(
+        _snapshot(hass.states.get(entity_id), entity_id) for entity_id in manager.entity_ids()
+    )
 
     async def _async_state_changed(event: Any) -> None:
         entity_id = event.data["entity_id"]
-        await manager.async_handle_entity_update(_snapshot(event.data.get("new_state"), entity_id), entity_id=entity_id)
+        await manager.async_handle_entity_update(
+            _snapshot(event.data.get("new_state"), entity_id), entity_id=entity_id
+        )
         _schedule_deadline()
 
     @callback
@@ -62,7 +69,11 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
         """Bridge the synchronous HA listener into the async manager."""
         hass.async_create_task(_async_state_changed(event))
 
-    unsub_state = async_track_state_change_event(hass, list(manager.entity_ids()), _state_changed) if manager.entity_ids() else lambda: None
+    unsub_state = (
+        async_track_state_change_event(hass, list(manager.entity_ids()), _state_changed)
+        if manager.entity_ids()
+        else lambda: None
+    )
     domain_data["unsub_state"] = unsub_state
     domain_data["unsub_deadline"] = None
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..models import CheckResult, CheckRuntimeState, EntitySnapshot, Observation
+from ..models import CheckResult, Observation
 from .base import BaseCheck, numeric_value
 
 
@@ -16,7 +16,10 @@ class StaleValueCheck(BaseCheck):
             return self.inactive()
         value = numeric_value(snapshot)
         if value is None:
-            return self.unknown("Stale-value source is unavailable or non-numeric", value=getattr(snapshot, "state", None))
+            return self.unknown(
+                "Stale-value source is unavailable or non-numeric",
+                value=getattr(snapshot, "state", None),
+            )
         if not runtime.observations or runtime.observations[-1].value != value:
             runtime.observations.append(Observation(now, value))
         window = self.definition.params["observation_window"]
@@ -43,5 +46,9 @@ class StaleValueCheck(BaseCheck):
                 changes += 1
                 previous = observation.value
         if changes < self.definition.params["minimum_changes"]:
-            return CheckResult("warning", f"Value changed {changes} time(s) in observation window", value=value)
-        return CheckResult("ok", f"Value changed {changes} time(s) in observation window", value=value)
+            return CheckResult(
+                "warning", f"Value changed {changes} time(s) in observation window", value=value
+            )
+        return CheckResult(
+            "ok", f"Value changed {changes} time(s) in observation window", value=value
+        )

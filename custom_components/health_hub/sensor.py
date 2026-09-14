@@ -12,7 +12,12 @@ from .const import DATA_MANAGER, DOMAIN, STATUSES
 async def async_setup_entry(hass: Any, entry: Any, async_add_entities) -> None:
     """Create one compact enum sensor for every configured system."""
     manager = hass.data[DOMAIN][DATA_MANAGER]
-    async_add_entities([HealthSystemSensor(manager, system_id, entry.entry_id) for system_id in manager.system_defs])
+    async_add_entities(
+        [
+            HealthSystemSensor(manager, system_id, entry.entry_id)
+            for system_id in manager.system_defs
+        ]
+    )
 
 
 class HealthSystemSensor(SensorEntity):

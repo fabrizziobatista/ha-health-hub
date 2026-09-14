@@ -2,20 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-import logging
 from typing import Any, Callable, Iterable
 
 from .checks import build_check
 from .const import (
-    EVENT_ISSUE_OPENED, EVENT_ISSUE_RESOLVED, EVENT_STATUS_CHANGED,
-    STATUS_CRITICAL, STATUS_OK, STATUS_RANK, STATUS_UNKNOWN, STATUS_WARNING,
+    EVENT_ISSUE_OPENED,
+    EVENT_ISSUE_RESOLVED,
+    EVENT_STATUS_CHANGED,
+    STATUS_CRITICAL,
+    STATUS_OK,
+    STATUS_RANK,
+    STATUS_UNKNOWN,
+    STATUS_WARNING,
 )
 from .events import event_payload
 from .models import (
-    CheckDefinition, CheckRuntimeState, EntitySnapshot, Observation,
-    SystemDefinition, SystemRuntimeState,
+    CheckDefinition,
+    CheckRuntimeState,
+    EntitySnapshot,
+    Observation,
+    SystemDefinition,
+    SystemRuntimeState,
 )
 from .store import HealthHubStore
 
@@ -111,7 +121,9 @@ class HealthManager:
             runtime.value = raw.get("value")
             runtime.since = _dt(raw.get("since"))
             runtime.issue_opened_at = _dt(raw.get("issue_opened_at"))
-            runtime.pending_status = raw.get("pending_status") if isinstance(raw.get("pending_status"), str) else None
+            runtime.pending_status = (
+                raw.get("pending_status") if isinstance(raw.get("pending_status"), str) else None
+            )
             runtime.pending_since = _dt(raw.get("pending_since"))
             runtime.invalid_since = _dt(raw.get("invalid_since"))
             runtime.bad_since = _dt(raw.get("bad_since"))
@@ -119,7 +131,8 @@ class HealthManager:
             runtime.observations = [
                 Observation(timestamp, float(item["value"]))
                 for item in raw.get("observations", [])
-                if isinstance(item, dict) and (timestamp := _dt(item.get("timestamp"))) is not None
+                if isinstance(item, dict)
+                and (timestamp := _dt(item.get("timestamp"))) is not None
                 and isinstance(item.get("value"), (int, float))
             ]
         for system_id, raw in data["systems"].items():
@@ -130,7 +143,9 @@ class HealthManager:
             runtime.last_ok = _dt(raw.get("last_ok"))
             runtime.last_changed_by_hub = _dt(raw.get("last_changed_by_hub"))
 
-    def set_snapshot(self, snapshot: EntitySnapshot | None, *, entity_id: str | None = None) -> None:
+    def set_snapshot(
+        self, snapshot: EntitySnapshot | None, *, entity_id: str | None = None
+    ) -> None:
         """Seed or update a cached snapshot without evaluation."""
         key = entity_id or (snapshot.entity_id if snapshot else None)
         if key is None:
@@ -148,7 +163,9 @@ class HealthManager:
         await self._evaluate_keys(self.checks, self._now(), emit_events=False)
         await self._save()
 
-    async def async_handle_entity_update(self, snapshot: EntitySnapshot | None, *, entity_id: str | None = None) -> None:
+    async def async_handle_entity_update(
+        self, snapshot: EntitySnapshot | None, *, entity_id: str | None = None
+    ) -> None:
         """Evaluate only checks that depend on a changed entity, then ancestors."""
         key = entity_id or (snapshot.entity_id if snapshot else None)
         if key is None:
@@ -171,18 +188,24 @@ class HealthManager:
     def next_deadline(self) -> datetime | None:
         return min(self._deadlines.values(), default=None)
 
-    async def _evaluate_keys(self, keys: Iterable[str], now: datetime, *, emit_events: bool) -> None:
+    async def _evaluate_keys(
+        self, keys: Iterable[str], now: datetime, *, emit_events: bool
+    ) -> None:
         affected_systems: set[str] = set()
         for key in keys:
             system_id, definition = self.check_defs[key]
             check = self.checks[key]
             runtime = self.check_runtime[key]
-            result = check.evaluate(self.snapshots.get(definition.entity_id), self.snapshots, runtime, now)
+            result = check.evaluate(
+                self.snapshots.get(definition.entity_id), self.snapshots, runtime, now
+            )
             self._apply_check_result(key, system_id, definition, runtime, result, now, emit_events)
             affected_systems.add(system_id)
         self._aggregate_ancestors(affected_systems, now, emit_events)
 
-    def _apply_check_result(self, key, system_id, definition, runtime, result, now, emit_events) -> None:
+    def _apply_check_result(
+        self, key, system_id, definition, runtime, result, now, emit_events
+    ) -> None:
         if result.next_deadline is None:
             self._deadlines.pop(key, None)
         else:
@@ -190,10 +213,27 @@ class HealthManager:
         if not result.active:
             was_open = runtime.issue_opened_at
             old = runtime.status
-            runtime.active, runtime.status, runtime.reason, runtime.value = False, STATUS_OK, result.reason, result.value
+            runtime.active, runtime.status, runtime.reason, runtime.value = (
+                False,
+                STATUS_OK,
+                result.reason,
+                result.value,
+            )
             runtime.pending_status = runtime.pending_since = None
             if was_open and emit_events:
-                self._emit(EVENT_ISSUE_RESOLVED, event_payload(system_id=system_id, check_id=definition.id, old_status=old, new_status=STATUS_OK, entity_id=definition.entity_id, reason="Check became inactive", timestamp=now, duration_seconds=(now - was_open).total_seconds()))
+                self._emit(
+                    EVENT_ISSUE_RESOLVED,
+                    event_payload(
+                        system_id=system_id,
+                        check_id=definition.id,
+                        old_status=old,
+                        new_status=STATUS_OK,
+                        entity_id=definition.entity_id,
+                        reason="Check became inactive",
+                        timestamp=now,
+                        duration_seconds=(now - was_open).total_seconds(),
+                    ),
+                )
             runtime.issue_opened_at = None
             return
         runtime.active = True
@@ -210,24 +250,51 @@ class HealthManager:
             old = runtime.status
             runtime.status, runtime.since = target, now
             runtime.pending_status = runtime.pending_since = None
-            self._transition_issue(system_id, definition, runtime, old, target, result.reason, now, emit_events)
+            self._transition_issue(
+                system_id, definition, runtime, old, target, result.reason, now, emit_events
+            )
         else:
             runtime.pending_status = runtime.pending_since = None
         runtime.reason, runtime.value = result.reason, result.value
         if target == STATUS_OK:
             runtime.last_ok = now
 
-    def _transition_issue(self, system_id, definition, runtime, old, new, reason, now, emit_events) -> None:
+    def _transition_issue(
+        self, system_id, definition, runtime, old, new, reason, now, emit_events
+    ) -> None:
         relevant_issue = not (definition.optional and new == STATUS_UNKNOWN)
         if new == STATUS_OK:
             if runtime.issue_opened_at and emit_events:
-                self._emit(EVENT_ISSUE_RESOLVED, event_payload(system_id=system_id, check_id=definition.id, old_status=old, new_status=new, entity_id=definition.entity_id, reason=reason, timestamp=now, duration_seconds=(now - runtime.issue_opened_at).total_seconds()))
+                self._emit(
+                    EVENT_ISSUE_RESOLVED,
+                    event_payload(
+                        system_id=system_id,
+                        check_id=definition.id,
+                        old_status=old,
+                        new_status=new,
+                        entity_id=definition.entity_id,
+                        reason=reason,
+                        timestamp=now,
+                        duration_seconds=(now - runtime.issue_opened_at).total_seconds(),
+                    ),
+                )
             runtime.issue_opened_at = None
             return
         if relevant_issue and runtime.issue_opened_at is None:
             runtime.issue_opened_at = now
             if emit_events:
-                self._emit(EVENT_ISSUE_OPENED, event_payload(system_id=system_id, check_id=definition.id, old_status=old, new_status=new, entity_id=definition.entity_id, reason=reason, timestamp=now))
+                self._emit(
+                    EVENT_ISSUE_OPENED,
+                    event_payload(
+                        system_id=system_id,
+                        check_id=definition.id,
+                        old_status=old,
+                        new_status=new,
+                        entity_id=definition.entity_id,
+                        reason=reason,
+                        timestamp=now,
+                    ),
+                )
 
     def _aggregate_ancestors(self, systems: set[str], now: datetime, emit_events: bool) -> None:
         all_ancestors: set[str] = set()
@@ -236,8 +303,7 @@ class HealthManager:
             while current is not None:
                 all_ancestors.add(current)
                 current = self.parents[current]
-        depth = lambda item: self._depth(item)
-        for system_id in sorted(all_ancestors, key=depth, reverse=True):
+        for system_id in sorted(all_ancestors, key=self._depth, reverse=True):
             self._aggregate_system(system_id, now, emit_events)
 
     def _depth(self, system_id: str) -> int:
@@ -268,7 +334,21 @@ class HealthManager:
         else:
             worst = max(candidates, key=lambda item: STATUS_RANK[item[0]])
             status, summary = worst[0], worst[1]
-            primary = None if worst[2] is None else {"check_id": worst[2], "status": worst[0], "entity_id": worst[3], "reason": worst[1], "since": self.check_runtime[self.check_key(system_id, worst[2])].since.isoformat() if self.check_runtime[self.check_key(system_id, worst[2])].since else None}
+            primary = (
+                None
+                if worst[2] is None
+                else {
+                    "check_id": worst[2],
+                    "status": worst[0],
+                    "entity_id": worst[3],
+                    "reason": worst[1],
+                    "since": self.check_runtime[
+                        self.check_key(system_id, worst[2])
+                    ].since.isoformat()
+                    if self.check_runtime[self.check_key(system_id, worst[2])].since
+                    else None,
+                }
+            )
             worst_child = worst[4] if worst[2] is None else None
         # A parent reports the number of actual leaf issues below it, rather
         # than merely the number of unhealthy immediate children. This keeps a
@@ -291,36 +371,100 @@ class HealthManager:
             unknown += child.unknown_count
         old = runtime.status
         runtime.status, runtime.summary, runtime.primary_issue = status, summary, primary
-        runtime.issue_count, runtime.critical_count, runtime.warning_count, runtime.unknown_count = critical + warning + unknown, critical, warning, unknown
+        (
+            runtime.issue_count,
+            runtime.critical_count,
+            runtime.warning_count,
+            runtime.unknown_count,
+        ) = critical + warning + unknown, critical, warning, unknown
         runtime.worst_child = worst_child
         if status == STATUS_OK:
             runtime.last_ok = now
         if status != old:
             runtime.last_changed_by_hub = now
             if emit_events:
-                self._emit(EVENT_STATUS_CHANGED, event_payload(system_id=system_id, check_id=None, old_status=old, new_status=status, entity_id=primary.get("entity_id") if primary else None, reason=summary, timestamp=now))
+                self._emit(
+                    EVENT_STATUS_CHANGED,
+                    event_payload(
+                        system_id=system_id,
+                        check_id=None,
+                        old_status=old,
+                        new_status=status,
+                        entity_id=primary.get("entity_id") if primary else None,
+                        reason=summary,
+                        timestamp=now,
+                    ),
+                )
             self._notify(system_id)
 
     async def _save(self) -> None:
-        self.store.data["checks"] = {key: self._serialize_check(runtime) for key, runtime in self.check_runtime.items()}
-        self.store.data["systems"] = {key: self._serialize_system(runtime) for key, runtime in self.system_runtime.items()}
+        self.store.data["checks"] = {
+            key: self._serialize_check(runtime) for key, runtime in self.check_runtime.items()
+        }
+        self.store.data["systems"] = {
+            key: self._serialize_system(runtime) for key, runtime in self.system_runtime.items()
+        }
         await self.store.async_save()
 
     @staticmethod
+    def _stamp(value: datetime | None) -> str | None:
+        """Serialize an optional timestamp for the small persistent payload."""
+        return value.isoformat() if value else None
+
+    @staticmethod
     def _serialize_check(value: CheckRuntimeState) -> dict[str, Any]:
-        stamp = lambda item: item.isoformat() if item else None
-        return {"status": value.status, "active": value.active, "reason": value.reason, "value": value.value, "since": stamp(value.since), "issue_opened_at": stamp(value.issue_opened_at), "pending_status": value.pending_status, "pending_since": stamp(value.pending_since), "invalid_since": stamp(value.invalid_since), "bad_since": stamp(value.bad_since), "last_ok": stamp(value.last_ok), "observations": [{"timestamp": item.timestamp.isoformat(), "value": item.value} for item in value.observations]}
+        return {
+            "status": value.status,
+            "active": value.active,
+            "reason": value.reason,
+            "value": value.value,
+            "since": HealthManager._stamp(value.since),
+            "issue_opened_at": HealthManager._stamp(value.issue_opened_at),
+            "pending_status": value.pending_status,
+            "pending_since": HealthManager._stamp(value.pending_since),
+            "invalid_since": HealthManager._stamp(value.invalid_since),
+            "bad_since": HealthManager._stamp(value.bad_since),
+            "last_ok": HealthManager._stamp(value.last_ok),
+            "observations": [
+                {"timestamp": item.timestamp.isoformat(), "value": item.value}
+                for item in value.observations
+            ],
+        }
 
     @staticmethod
     def _serialize_system(value: SystemRuntimeState) -> dict[str, Any]:
-        stamp = lambda item: item.isoformat() if item else None
-        return {"status": value.status, "last_ok": stamp(value.last_ok), "last_changed_by_hub": stamp(value.last_changed_by_hub)}
+        return {
+            "status": value.status,
+            "last_ok": HealthManager._stamp(value.last_ok),
+            "last_changed_by_hub": HealthManager._stamp(value.last_changed_by_hub),
+        }
 
     def system_attributes(self, system_id: str) -> dict[str, Any]:
         runtime = self.system_runtime[system_id]
-        stamp = lambda item: item.isoformat() if item else None
-        return {"issue_count": runtime.issue_count, "critical_count": runtime.critical_count, "warning_count": runtime.warning_count, "unknown_count": runtime.unknown_count, "summary": runtime.summary, "worst_child": runtime.worst_child, "primary_issue": runtime.primary_issue, "last_ok": stamp(runtime.last_ok), "last_changed_by_hub": stamp(runtime.last_changed_by_hub)}
+        return {
+            "issue_count": runtime.issue_count,
+            "critical_count": runtime.critical_count,
+            "warning_count": runtime.warning_count,
+            "unknown_count": runtime.unknown_count,
+            "summary": runtime.summary,
+            "worst_child": runtime.worst_child,
+            "primary_issue": runtime.primary_issue,
+            "last_ok": self._stamp(runtime.last_ok),
+            "last_changed_by_hub": self._stamp(runtime.last_changed_by_hub),
+        }
 
     def async_diagnostics(self) -> dict[str, Any]:
         """Return useful, compact, non-secret diagnostic data."""
-        return {"systems": {system_id: {"status": runtime.status, "attributes": self.system_attributes(system_id), "checks": [definition.id for definition in self.system_defs[system_id].checks], "children": [child.id for child in self.system_defs[system_id].children]} for system_id, runtime in self.system_runtime.items()}, "check_count": len(self.check_runtime), "next_deadline": self.next_deadline().isoformat() if self.next_deadline() else None}
+        return {
+            "systems": {
+                system_id: {
+                    "status": runtime.status,
+                    "attributes": self.system_attributes(system_id),
+                    "checks": [definition.id for definition in self.system_defs[system_id].checks],
+                    "children": [child.id for child in self.system_defs[system_id].children],
+                }
+                for system_id, runtime in self.system_runtime.items()
+            },
+            "check_count": len(self.check_runtime),
+            "next_deadline": self.next_deadline().isoformat() if self.next_deadline() else None,
+        }
