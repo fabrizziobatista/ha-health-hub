@@ -1,0 +1,22 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-test.txt
+      - run: python -m compileall -q custom_components
+      - run: python -m unittest discover -s tests -v
+      - run: python -m pytest
+      - run: python -m ruff check custom_components tests
+      - run: python -m json.tool custom_components/health_hub/manifest.json
+      - run: python -m json.tool hacs.json
